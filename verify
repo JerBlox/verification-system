@@ -1,0 +1,199 @@
+client.on('guildMemberAdd', async (member) => {
+
+                console.log("1")
+
+                const { Captcha } = require("captcha-canvas");
+
+                console.log("2")
+
+                const embedtime = new Discord.MessageEmbed()
+                .setTitle("❌ Failed Verification!")
+                .setDescription("You have exceeded the verification time limit of 60 seconds! You are kicked from the server!")
+                .setColor("RED")
+
+                const embedvalid = new Discord.MessageEmbed()
+                .setTitle("✅ Success Verification!")
+                .setDescription(`You have been successfully verified, you can know access channels in ${member.guild}`)
+                .setColor("GREEN")
+
+                const embedinvalid = new Discord.MessageEmbed()
+                .setTitle("❌ Failed Verification!")
+                .setDescription("Invalid answer! Try again!")
+                .setColor("RED")
+
+                // verification
+                const data = await Schema.findOne({ guildId: member.guild.id })
+                console.log("3")
+                if(!data) return;
+                const user = data.mutedMembers.findIndex((mutedMembers) => mutedMembers === member.id)
+                console.log("4")
+                if (user == -1) {
+                    // check if verification mode is turned on
+                    const verify = data.verification
+                    if(verify == 1) {
+
+                        client.channels.cache.get('910339516387196969').send(`${member.guild.id}, verification system`)
+                        
+                        const noverrole = member.guild.roles.cache.find(r => r.name.toLowerCase() === 'unverified')
+                        if(!noverrole) {
+                            let unverrole2 = await member.guild.roles.create({
+                                name : 'Unverified',
+                                color: 'ORANGE'
+                            })
+                            member.guild.channels.cache.filter(c => c.type === 'GUILD_TEXT').forEach(async(channel, id) => {
+                                channel.permissionOverwrites.create(unverrole2, { VIEW_CHANNEL: false });
+                            });
+                            member.guild.channels.cache.filter(c => c.type === 'GUILD_VOICE').forEach(async(channel, id) => {
+                                channel.permissionOverwrites.create(unverrole2, { VIEW_CHANNEL: false })
+                            });
+                            member.guild.channels.cache.filter(c => c.name === 'verification').forEach(async(channel, id) => {
+                                channel.permissionOverwrites.create(unverrole2, { VIEW_CHANNEL: true, SEND_MESSAGES: false })
+                            });
+                            member.roles.add(unverrole2)
+                        } else {
+                            member.roles.add(noverrole)
+                        }
+
+                        const verchann = member.guild.channels.cache.find(c => c.name === 'verification')
+                        if(!verchann) {
+                            member.guild.channels.create('verification', {
+                                type: 'GUILD_TEXT',
+                                permissionOverwrites: [{
+                                    id: member.guild.roles.everyone,
+                                    deny: ['VIEW_CHANNEL'],
+                                }],
+                            }).then((chan) => {
+                                member.guild.channels.cache.filter(c => c.name === 'verification').forEach(async(channel, id) => {
+                                    channel.permissionOverwrites.create(member.guild.roles.cache.find(r => r.name.toLowerCase() === 'unverified'), { VIEW_CHANNEL: true, SEND_MESSAGES: false })
+                                });
+                                setTimeout(function() {
+                                    const verifyembed = new Discord.MessageEmbed()
+                                    .setTitle("Verification")
+                                    .setDescription(`<@${member.id}> I have sent a message to your dm, please check it and complete the verification!\nIf You didn't get a dm from me, please enable direct messages from this server. You can enable it from the server privacy setting. Then rejoin the server`)
+                                    .setColor("ORANGE")
+                                chan.send({ content: `<@${member.id}>`, embeds: [verifyembed] });
+                              }, 1000)});
+                        } else {
+                            const verifyembed2 = new Discord.MessageEmbed()
+                                    .setTitle("Verification")
+                                    .setDescription(`<@${member.id}> I have sent a message to your dm, please check it and complete the verification!\nIf You didn't get a dm from me, please enable direct messages from this server. You can enable it from the server privacy setting. Then rejoin the server`)
+                                    .setColor("ORANGE")
+                            verchann.send({content: `<@${member.id}>`, embeds: [verifyembed2] })
+                        }
+
+                        // verification
+                        const captcha = new Captcha();
+                        captcha.async = true;
+                        captcha.addDecoy();
+                        captcha.drawTrace();
+                        captcha.drawCaptcha();
+
+                        const attach = new Discord.MessageAttachment(
+                            await captcha.png,
+                            "captcha.png"
+                        );
+
+                        const embed = new Discord.MessageEmbed()
+                        .setTitle("Human Verification")
+                        .setDescription("You have 60 seconds to answer this captcha! This captcha is CASE SENSITIVE!")
+                        .setImage("attachment://captcha.png")
+
+                        
+                        const dm = await member.createDM()
+
+                        member.send({
+                            files: [attach],
+                            embeds: [embed]
+                        })
+
+                        const filter = (message) => {
+                            if (message.author.id !== member.id) return;
+                            if (message.content === captcha.text) return true;
+                            else member.send({ embeds: [embedinvalid] });
+                        }
+
+                        try {
+                            const response = await dm.awaitMessages({
+                                filter,
+                                max: 1,
+                                time: 60000,
+                                errors: ["time"],
+                            })
+
+                            if (response) {
+                                member.send({ embeds: [embedvalid] })
+                                let logschan = member.guild.channels.cache.find(c => c.name.toLowerCase() === 'verification-logs')
+                            if(!logschan) {
+                                member.guild.channels.create('verification-logs', {
+                                    type: 'GUILD_TEXT',
+                                    permissionOverwrites: [{
+                                        id: member.guild.roles.everyone,
+                                        deny: ['VIEW_CHANNEL'],
+                                    }]
+                                }).then((chan) => {
+                                    setTimeout(function() {
+                                        const verifyokembed = new Discord.MessageEmbed()
+                                        .setTitle("Verification Info")
+                                        .setDescription(`${member} has completed the human verification`)
+                                        .setThumbnail(member.displayAvatarURL())
+                                        .setTimestamp()
+                                        .setColor("GREEN")
+                                    chan.send({ embeds: [verifyokembed] });
+                                  }, 1000)});
+                            } else {
+                                const verifyokembed2 = new Discord.MessageEmbed()
+                                        .setTitle("Verification Info")
+                                        .setDescription(`${member} has completed the human verification`)
+                                        .setThumbnail(member.displayAvatarURL())
+                                        .setTimestamp()
+                                        .setColor("GREEN")
+                                    logschan.send({ embeds: [verifyokembed2] });
+                            }
+                                member.roles.remove(member.guild.roles.cache.find(r => r.name.toLowerCase() === 'unverified'))
+                                return
+                            }
+                        } catch (err) {
+                            await member.send({ embeds: [embedtime] })
+                            let logschan = member.guild.channels.cache.find(c => c.name.toLowerCase() === 'verification-logs')
+                            if(!logschan) {
+                                member.guild.channels.create('verification-logs', {
+                                    type: 'GUILD_TEXT',
+                                    permissionOverwrites: [{
+                                        id: member.guild.roles.everyone,
+                                        deny: ['VIEW_CHANNEL'],
+                                    }]
+                                }).then((chan) => {
+                                    setTimeout(function() {
+                                        const verifyfailembed = new Discord.MessageEmbed()
+                                        .setTitle("Verification Info")
+                                        .setDescription(`${member} has failed the human verification`)
+                                        .setThumbnail(member.displayAvatarURL())
+                                        .setFooter("The member has been kicked from the server")
+                                        .setTimestamp()
+                                        .setColor("RED")
+                                    chan.send({ embeds: [verifyfailembed] });
+                                  }, 1000)});
+                            } else {
+                                const verifyfailembed2 = new Discord.MessageEmbed()
+                                        .setTitle("Verification Info")
+                                        .setDescription(`${member} has failed the human verification`)
+                                        .setThumbnail(member.displayAvatarURL())
+                                        .setFooter("The member has been kicked from the server")
+                                        .setTimestamp()
+                                        .setColor("RED")
+                                    logschan.send({ embeds: [verifyfailembed2] });
+                            }
+                            member.kick()
+                            return
+                        }
+
+                    } else {
+                        return
+                    }
+
+                } else {
+                    const role = member.guild.roles.cache.find(role => role.name.toLowerCase() === 'muted')
+                    member.roles.add(role)
+                }
+
+            })
